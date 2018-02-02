@@ -140,7 +140,7 @@ try :
     parser.add_argument("--test_type", help="AUTOTEST or MANUAL or BACKUP OR XYZ")
     parser.add_argument("--campaign_id", help="Campaign ID or Null")
     parser.add_argument("--email_address", help="Enter email address")
-    parser.add_argument("--GITVER", help="Enter git version to use")
+ #   parser.add_argument("--GITVER", help="Enter git version to use")
 
     args = parser.parse_args()
     locale_name = args.locale_name
@@ -150,7 +150,7 @@ try :
     run_date = args.run_date
     test_type = args.test_type
     locale = locale_name
-    GITVER = args.GITVER
+ #   GITVER = args.GITVER
     
 #   locale = 'en_ca'
 #   job_type = 'test'
@@ -253,9 +253,16 @@ else:
     LaunchDate = run_date
 
 ##### UDF'S for MIS module ##########
-sc.addPyFile("s3://bex-analytics-softwares/builds/affine-alpha-tech-team.git/{}/scripts/codes/modularization-scripts/PathBuilder.py".format(GITVER))
+def BuildPath(env_type,job_type,test_type,LaunchDate,locale_name,cpgn_type):
+    path_dict = {}
+    for path in ['OcelotDataProcessing_Output','Mis_Output','TP_Output','User_Token_Output','RecipientID_Output',]:
+        if  job_type != 'prod':
+            if test_type in ('MANUAL','BACKUP','AUTOTEST'):
+                path_dict[path] = "s3://occ-decisionengine/AlphaModularization/Environment_{}/Job_{}/Test_{}/{}/{}/{}/{}/".format(env_type,job_type,test_type,LaunchDate,locale_name,cpgn_type,path)
+        else:
+            path_dict[path] = "s3://occ-decisionengine/AlphaModularization/Environment_{}/Job_{}/{}/{}/{}/{}/".format(env_type,job_type,LaunchDate,locale_name,cpgn_type,path)
+    return path_dict
 
-from PathBuilder import *
 path_dict = BuildPath(env_type,job_type,test_type,LaunchDate,locale_name,cpgn_type)
 
 ## function to extract joining key of MIS table
@@ -320,11 +327,11 @@ def code_completion_email(body,subject,pos,locale_name):
 #Need mis_data_rdd_dic
 def readAllMisFiles():
     
-    mapping_query = """(SELECT lower(TableName) as TableName,ServerName as ServerName from Alpha{}.dbo.DimContentTables with (NOLOCK)) foo """.format(env_type.title()) 
+    mapping_query = """(SELECT TableName as TableName,ServerName as ServerName from Alpha{}.dbo.DimContentTables with (NOLOCK)) foo """.format(env_type.title()) 
     mapping_table = sc.broadcast(importSQLTableForBusinessBasedSuppression(mapping_query, severName.value["mysql"]).toPandas().set_index("TableName").T.to_dict())
     
     for file_name in mis_data_file_names:
-        file_name=file_name.lower()
+        
         try:
             if mapping_table.value[file_name]["ServerName"] == "MIS_LINK":
                 file = importAURORATable("MIS",file_name)
@@ -386,6 +393,7 @@ def generateMisRdd():
     mis_data_df = (dfMetaCampaignData_VarDef_backup
                         .filter("var_source is not null")
                         .select("module_id","var_position","var_source","var_structure").distinct())
+    mis_data_df.cache()
                         
 
 
@@ -446,7 +454,7 @@ def generateMisContentDict():
     for i in mis_data_rdd:
         try :
             module_id = i["module_id"]
-            file_name = i["file_name"].lower()
+            file_name = i["file_name"]
             join_keys = [val for val in i["keys"].split("##") if val!='']
             mis_cols = i["mis_cols"].split("##")
             cols_req = ["key"] + mis_cols             #format of [key, col1, col2....]
